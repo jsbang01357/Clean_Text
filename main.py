@@ -2,6 +2,7 @@ import streamlit as st
 import datetime
 from text_cleaner import render_text_cleaner
 from lab_to_table import render_lab_to_excel_tool
+from qna import render_qna
 
 # 한국 시간(KST) 타임존 정의 (UTC+9)
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -22,6 +23,7 @@ def main():
 
     btn_cleaner_type = "primary" if st.session_state.menu == "cleaner" else "secondary"
     btn_labexcel_type = "primary" if st.session_state.menu == "labexcel" else "secondary"
+    btn_qna_type = "primary" if st.session_state.menu == "qna" else "secondary"
 
     if st.sidebar.button("🧹 텍스트 클리너", type=btn_cleaner_type, use_container_width=True):
         st.session_state.menu = "cleaner"
@@ -29,6 +31,10 @@ def main():
     
     if st.sidebar.button("🧪 테이블 변환기", type=btn_labexcel_type, use_container_width=True):
         st.session_state.menu = "labexcel"
+        st.rerun()
+
+    if st.sidebar.button("❓ Q&A / 도움말", type=btn_qna_type, use_container_width=True):
+        st.session_state.menu = "qna"
         st.rerun()
 
     st.sidebar.markdown("---")
@@ -45,6 +51,10 @@ def main():
     # --- [메뉴 2] Lab → Table 기능 ---
     elif st.session_state.menu == "labexcel":
         render_lab_to_excel_tool()
+
+    # --- [메뉴 3] Q&A / 도움말 ---
+    elif st.session_state.menu == "qna":
+        render_qna()
 
 if __name__ == "__main__":
     main()

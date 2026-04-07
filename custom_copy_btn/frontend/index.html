@@ -1,81 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>copy-to-clipboard</title>
-    <script src="./streamlit-component-lib.js"></script>
-    <style>
-      body { margin: 0; padding: 0; }
-      .copy-btn {
-        display: inline-flex;
-        -webkit-box-align: center;
-        align-items: center;
-        -webkit-box-pack: center;
-        justify-content: center;
-        font-weight: 400;
-        padding: 0.25rem 0.75rem;
-        border-radius: 0.5rem;
-        min-height: 2.5rem;
-        margin: 0;
-        line-height: 1.6;
-        color: inherit;
-        width: 100%;
-        user-select: none;
-        background-color: #ffffff;
-        border: 1px solid rgba(49, 51, 63, 0.2);
-        cursor: pointer;
-        font-size: 14px;
-        font-family: "Source Sans Pro", sans-serif;
-        box-sizing: border-box;
-        transition: border-color 0.2s, color 0.2s, background-color 0.2s;
-      }
-      .copy-btn:hover {
-        border-color: rgb(255, 75, 75);
-        color: rgb(255, 75, 75);
-      }
-      .copy-btn:active {
-        border-color: rgb(255, 75, 75);
-        background-color: rgb(255, 75, 75);
-        color: rgb(255, 255, 255);
-      }
-      @media (prefers-color-scheme: dark) {
-        .copy-btn {
-          background-color: transparent;
-          color: #fafafa;
-          border-color: rgba(250, 250, 250, 0.2);
-        }
-        .copy-btn:hover {
-          border-color: rgb(255, 75, 75);
-          color: rgb(255, 75, 75);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <button id="copy-button" class="copy-btn">📋</button>
-    <script>
-      function onRender(event) {
-        if (!window.rendered) {
-          const { text, before_copy_label, after_copy_label } = event.detail.args;
-          const button = document.getElementById('copy-button');
-          button.textContent = before_copy_label;
 
-          button.addEventListener('click', function() {
-            navigator.clipboard.writeText(text);
-            button.textContent = after_copy_label;
-            setTimeout(() => {
-              button.textContent = before_copy_label;
-            }, 1000);
-          });
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>copy-to-clipboard</title>
+  <script src="./streamlit-component-lib.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
 
-          window.rendered = true;
-        }
+    .copy-btn {
+      display: inline-flex;
+      -webkit-box-align: center;
+      align-items: center;
+      -webkit-box-pack: center;
+      justify-content: center;
+      font-weight: 400;
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.5rem;
+      min-height: 2.5rem;
+      margin: 0;
+      line-height: 1.6;
+      color: #ffffff;
+      width: 100%;
+      user-select: none;
+      background-color: #15b8a6;
+      border: 1px solid #15b8a6;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: "Source Sans Pro", sans-serif;
+      box-sizing: border-box;
+      transition: border-color 0.2s, color 0.2s, background-color 0.2s;
+    }
+
+    .copy-btn:hover {
+      border-color: #107367;
+      color: #107367;
+    }
+
+    .copy-btn:active {
+      border-color: #107367;
+      background-color: #107367;
+      color: rgb(255, 255, 255);
+    }
+  </style>
+</head>
+
+<body>
+  <button id="copy-button" class="copy-btn">📋</button>
+  <script>
+    function onRender(event) {
+      if (!window.rendered) {
+        const { text, before_copy_label, after_copy_label } = event.detail.args;
+        const button = document.getElementById('copy-button');
+        button.textContent = before_copy_label;
+
+        button.addEventListener('click', function () {
+          navigator.clipboard.writeText(text);
+          button.textContent = after_copy_label;
+          setTimeout(() => {
+            button.textContent = before_copy_label;
+          }, 1000);
+        });
+
+        window.rendered = true;
       }
+    }
 
-      Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
-      Streamlit.setComponentReady();
-      Streamlit.setFrameHeight(38);
-    </script>
-  </body>
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(38);
+  </script>
+</body>
+
 </html>

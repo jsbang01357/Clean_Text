@@ -18,7 +18,8 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+import datetime
+from datetime import datetime, timezone, timedelta
 from io import BytesIO
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -393,7 +394,7 @@ def build_excel_bytes(rows: List[LabRow], raw_text: str, unparsed_lines: List[st
         unparsed_df.to_excel(writer, index=False, sheet_name="Unparsed")
 
         wb = writer.book
-        ws_group = wb.create_sheet("Grouped_Tables")
+        ws_group = wb.create_sheet("Grouped_Tables", 0)
 
         title_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
         header_fill = PatternFill(fill_type="solid", fgColor="F3F4F6")
@@ -420,16 +421,18 @@ def build_excel_bytes(rows: List[LabRow], raw_text: str, unparsed_lines: List[st
             current_row += 1
 
             for r in group_rows:
-                ws_group.cell(row=current_row, column=1, value=r.name)
-                value_cell = ws_group.cell(row=current_row, column=2, value=r.value)
-                ws_group.cell(row=current_row, column=3, value=r.unit)
-                ws_group.cell(row=current_row, column=4, value=r.ref)
+                c1 = ws_group.cell(row=current_row, column=1, value=r.name)
+                c2 = ws_group.cell(row=current_row, column=2, value=r.value)
+                c3 = ws_group.cell(row=current_row, column=3, value=r.unit)
+                c4 = ws_group.cell(row=current_row, column=4, value=r.ref)
 
                 flag = value_flag(r.value)
                 if flag == "up":
-                    value_cell.font = red_font
+                    for c in [c1, c2, c3, c4]:
+                        c.font = red_font
                 elif flag == "down":
-                    value_cell.font = blue_font
+                    for c in [c1, c2, c3, c4]:
+                        c.font = blue_font
                 current_row += 1
 
             current_row += 2
@@ -446,13 +449,14 @@ def build_excel_bytes(rows: List[LabRow], raw_text: str, unparsed_lines: List[st
 
             if sheet_name == "Parsed_Labs" and not df.empty:
                 for row_idx in range(2, len(df) + 2):
-                    cell = ws.cell(row=row_idx, column=3)  # 결과값
-                    val = str(cell.value or "")
+                    # 결과값(3번 컬럼)을 기준으로 플래그 확인
+                    val = str(ws.cell(row=row_idx, column=3).value or "")
                     flag = value_flag(val)
-                    if flag == "up":
-                        cell.font = red_font
-                    elif flag == "down":
-                        cell.font = blue_font
+                    if flag:
+                        target_font = red_font if flag == "up" else blue_font
+                        # 제목~채혈시각(1~7번 컬럼) 전체 색상 적용
+                        for col_idx in range(1, 8):
+                            ws.cell(row=row_idx, column=col_idx).font = target_font
 
         for idx, width in {1: 28, 2: 16, 3: 14, 4: 50}.items():
             ws_group.column_dimensions[get_column_letter(idx)].width = width
@@ -495,18 +499,40 @@ def render_lab_to_excel_tool() -> None:
 
     if clear:
         st.session_state["lab_excel_input"] = ""
+        st.session_state["lab_results"] = None
         st.rerun()
 
+    # --- 데이터 처리 로직 (버튼 클릭 시에만 실행) ---
     if run:
         if not raw_text.strip():
             st.warning("원문을 먼저 붙여넣어 주세요.")
-            return
+            st.session_state["lab_results"] = None
+        else:
+            rows, unparsed_lines = parse_lab_text(raw_text)
+            df = rows_to_dataframe(rows)
+            excel_bytes = build_excel_bytes(rows, raw_text, unparsed_lines)
+            tsv_text = rows_to_tsv(rows)
+            grouped = rows_grouped(rows)
+            
+            # 파싱 결과를 세션 상태에 저장하여 리런 시에도 유지
+            st.session_state["lab_results"] = {
+                "rows": rows,
+                "unparsed_lines": unparsed_lines,
+                "df": df,
+                "excel_bytes": excel_bytes,
+                "tsv_text": tsv_text,
+                "grouped": grouped
+            }
 
-        rows, unparsed_lines = parse_lab_text(raw_text)
-        df = rows_to_dataframe(rows)
-        excel_bytes = build_excel_bytes(rows, raw_text, unparsed_lines)
-        tsv_text = rows_to_tsv(rows)
-        grouped = rows_grouped(rows)
+    # --- 결과 렌더링 로직 (세션에 결과가 있을 때 항상 실행) ---
+    if "lab_results" in st.session_state and st.session_state["lab_results"] is not None:
+        res = st.session_state["lab_results"]
+        rows = res["rows"]
+        unparsed_lines = res["unparsed_lines"]
+        df = res["df"]
+        excel_bytes = res["excel_bytes"]
+        tsv_text = res["tsv_text"]
+        grouped = res["grouped"]
 
         st.success(f"{len(rows)}개 row를 추출했습니다.")
         metric_cols = st.columns(4)
@@ -522,12 +548,17 @@ def render_lab_to_excel_tool() -> None:
             st.dataframe(group_df, use_container_width=True, hide_index=True)
             st.write("")
 
+        # 파일명 생성 (KST 기준)
+        kst = timezone(timedelta(hours=9))
+        now_str = datetime.now(kst).strftime("%Y%m%d_%H%M")
+        file_base = f"table_{now_str}"
+
         dl_col1, dl_col2 = st.columns(2)
         with dl_col1:
             st.download_button(
                 label="📥 엑셀 다운로드",
                 data=excel_bytes,
-                file_name="lab_analysis.xlsx",
+                file_name=f"{file_base}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
@@ -535,7 +566,7 @@ def render_lab_to_excel_tool() -> None:
             st.download_button(
                 label="📥 TSV 다운로드",
                 data=tsv_text,
-                file_name="lab_analysis.tsv",
+                file_name=f"{file_base}.tsv",
                 mime="text/tab-separated-values",
                 use_container_width=True,
             )
