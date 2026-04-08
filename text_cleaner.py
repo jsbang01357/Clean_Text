@@ -469,149 +469,7 @@ def _clean_emr_problem_list(text):
     return "\n".join(result)
 
 
-# --- 6. Lab 결과 줄 정렬 ---
-# 플래그 문자를 읽기 쉬운 화살표로 변환
-FLAG_MAP = {
-    '▲': '↑', 'H': '↑', '△': '↑',
-    '▼': '↓', 'L': '↓', '▽': '↓',
-}
 
-def _parse_lab_line(line):
-    """Lab 줄을 5개 필드로 파싱합니다.
-    
-    Returns:
-        dict with keys: test_name, value, flag, unit, ref_range
-        또는 None (파싱 실패)
-    """
-    stripped = line.strip()
-    if not stripped:
-        return None
-    
-    # (응급) 또는 (혈액) 같은 prefix 제거 후 검사명에 포함
-    prefix = ''
-    prefix_match = re.match(r'^(\([^)]+\))\s*', stripped)
-    if prefix_match:
-        prefix = prefix_match.group(1)
-        stripped = stripped[prefix_match.end():]
-    
-    # 패턴: 검사명 + 구분자(공백/탭) + 값 + [플래그] + [단위] + [참고범위]
-    # 탭으로 이미 구분된 경우
-    if '\t' in stripped:
-        parts = [p.strip() for p in stripped.split('\t') if p.strip()]
-    else:
-        # 공백 기반 분리 (연속 공백 2+ 를 구분자로)
-        parts = [p.strip() for p in re.split(r'\s{2,}', stripped) if p.strip()]
-    
-    if len(parts) < 2:
-        return None
-    
-    test_name = prefix + parts[0]
-    
-    # 나머지 parts에서 value, flag, unit, ref_range 추출
-    value = ''
-    flag = ''
-    unit = ''
-    ref_range = ''
-    
-    remaining = parts[1:]
-    
-    for part in remaining:
-        # 참고범위: ~ 포함
-        if '~' in part or '–' in part or '−' in part:
-            ref_range = part
-        # 플래그: ▲, ▼, H, L (단독)
-        elif part in ('▲', '▼', '△', '▽', 'H', 'L', '★'):
-            flag = FLAG_MAP.get(part, part)
-        # 단위: 알파벳/기호 조합 (숫자 없음)
-        elif re.match(r'^[a-zA-Zμ%/×]+(?:[/\s][a-zA-Zμ]+)*$', part) and not re.search(r'\d', part):
-            unit = part
-        # 숫자값
-        elif re.search(r'\d', part) and not value:
-            value = part
-        elif not value:
-            value = part
-        else:
-            # 나머지는 참고범위에 추가
-            if ref_range:
-                ref_range += ' ' + part
-            else:
-                ref_range = part
-    
-    if not value:
-        return None
-    
-    return {
-        'test_name': test_name,
-        'value': value,
-        'flag': flag,
-        'unit': unit,
-        'ref_range': ref_range,
-    }
-
-
-def _clean_emr_lab_format(text, mode='compact'):
-    """6. Lab 결과 줄 정렬
-    
-    Lab 줄(줄 분류기가 'lab'으로 판정한 줄)을 파싱하여 
-    구조화된 형태로 변환합니다.
-    
-    Args:
-        text: 원본 텍스트
-        mode: 출력 형식
-            'compact' - "HbA1c 10.8% ↑" (간결한 텍스트)
-            'table'   - "| Test | Value | Unit | Flag | Ref |" (테이블)
-    """
-    lines = text.splitlines()
-    result = []
-    lab_buffer = []  # 연속 lab 줄을 모아두는 버퍼
-    
-    def flush_lab_buffer():
-        """수집된 lab 줄들을 포맷팅하여 result에 추가"""
-        nonlocal lab_buffer
-        if not lab_buffer:
-            return
-        
-        if mode == 'table' and len(lab_buffer) >= 1:
-            result.append("\t| Test | Value | Unit | Flag | Ref |")
-            result.append("\t|---|---:|---|---|---|")
-            for parsed in lab_buffer:
-                flag_str = parsed['flag'] if parsed['flag'] else ''
-                unit_str = parsed['unit'] if parsed['unit'] else ''
-                ref_str = parsed['ref_range'] if parsed['ref_range'] else ''
-                result.append(f"\t| {parsed['test_name']} | {parsed['value']} | {unit_str} | {flag_str} | {ref_str} |")
-        else:  # compact mode
-            for parsed in lab_buffer:
-                parts = [f"\t{parsed['test_name']}: {parsed['value']}"]
-                if parsed['unit']:
-                    parts[0] += f" {parsed['unit']}"
-                if parsed['flag']:
-                    parts[0] += f" {parsed['flag']}"
-                if parsed['ref_range']:
-                    parts[0] += f" (ref {parsed['ref_range']})"
-                result.append(parts[0])
-        
-        lab_buffer = []
-    
-    for line in lines:
-        line_type = _classify_line(line)
-        
-        if line_type == 'lab':
-            parsed = _parse_lab_line(line)
-            if parsed:
-                lab_buffer.append(parsed)
-            else:
-                # 파싱 실패 시 원본 유지
-                flush_lab_buffer()
-                result.append(line)
-        else:
-            # lab이 아닌 줄을 만나면 버퍼 flush
-            flush_lab_buffer()
-            result.append(line)
-    
-    # 마지막 남은 lab 버퍼
-    flush_lab_buffer()
-    
-    return "\n".join(result)
 
 
 def _clean_emr_special_markers(text):
@@ -644,16 +502,13 @@ def _render_emr_mode():
     emr_block = True
     emr_sec = False
     emr_prob = False
-    emr_lab = False
     emr_markers = False
-    default_lab_mode = 'compact'
 
     if "Standard" in preset:
         emr_sec = True
     elif "Aggressive" in preset:
         emr_sec = True
         emr_prob = True
-        emr_lab = True
 
     # 고급 옵션 (Advanced)은 Expander 안에 숨김
     with st.expander("🛠️ 고급 정리 옵션 (직접 설정)"):
@@ -669,18 +524,8 @@ def _render_emr_mode():
             emr_block_check = st.checkbox("명백한 기록 블록 분리", value=emr_block)
             emr_section_check = st.checkbox("섹션 헤더 표준화", value=emr_sec)
             emr_problem_check = st.checkbox("Problem List 재구성 (위험)", value=emr_prob)
-            emr_lab_check = st.checkbox("Lab 결과 포맷팅 (위험)", value=emr_lab)
             emr_markers_check = st.checkbox("특수 마커 제거 (★, ▲ 등)", value=emr_markers)
 
-        lab_mode = default_lab_mode
-        if emr_lab_check:
-            lab_mode_sel = st.radio(
-                "Lab 출력 형식",
-                ['compact', 'table'],
-                format_func=lambda x: '📝 Compact (텍스트 한 줄)' if x == 'compact' else '📊 Table (마크다운 표)',
-                horizontal=True
-            )
-            lab_mode = lab_mode_sel
 
     st.markdown("---")
 
@@ -715,8 +560,6 @@ def _render_emr_mode():
                 cleaned = _clean_emr_section_headers(cleaned)
             if emr_problem_check:
                 cleaned = _clean_emr_problem_list(cleaned)
-            if emr_lab_check:
-                cleaned = _clean_emr_lab_format(cleaned, mode=lab_mode)
             if emr_empty_lines:
                 cleaned = _clean_emr_empty_lines(cleaned)
             if emr_markers_check:
