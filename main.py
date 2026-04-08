@@ -25,12 +25,12 @@ def main():
     btn_labexcel_type = "primary" if st.session_state.menu == "labexcel" else "secondary"
     btn_qna_type = "primary" if st.session_state.menu == "qna" else "secondary"
 
-    if st.sidebar.button("🧹 텍스트 클리너", type=btn_cleaner_type, use_container_width=True):
-        st.session_state.menu = "cleaner"
-        st.rerun()
-    
     if st.sidebar.button("🧪 테이블 변환기", type=btn_labexcel_type, use_container_width=True):
         st.session_state.menu = "labexcel"
+        st.rerun()
+
+    if st.sidebar.button("🧹 텍스트 클리너", type=btn_cleaner_type, use_container_width=True):
+        st.session_state.menu = "cleaner"
         st.rerun()
 
     if st.sidebar.button("❓ Q&A / 도움말", type=btn_qna_type, use_container_width=True):
