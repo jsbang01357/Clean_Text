@@ -194,7 +194,7 @@ def render_lab_to_excel_tool() -> None:
                 st.code("\n".join(report_lines), language="text")
 
         if unparsed_lines:
-            with st.expander("⚠️ 파싱되지 일반 줄 보기", expanded=False):
+            with st.expander("⚠️ 파싱되지 않은 줄 보기", expanded=False):
                 st.code("\n".join(unparsed_lines), language="text")
 
 
