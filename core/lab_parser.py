@@ -24,9 +24,9 @@ SECTION_TITLE_BLACKLIST = {
     "종)", "Routine U/A with Microscope", "Gram Stain & Cul & Sensi", "Urine Microscopy",
     "ABGA ,Ca++,electrolyte", "CBC with diff & Reti", "ABGA (Lactate 포함)",
     "Prothrombin Time", "Cardiac Marker", "Electrolyte(3종)", "Calculated LDL Cholesterol",
-    "PB morphology", "SUMMARY", "Comment", "RBC", "WBC", "Platelet", "normal in No.", "relative eosinophilia",
+    "PB morphology", "SUMMARY", "Comment", "normal in No.", "relative eosinophilia",
     "All items of ABGA", "IPF (Immature platelet frac", "IRF (immature reticulocyte",
-    "Routine U/A (10종)", "Urine Microscopy", "ABO/Rh type & screening", "normocytic normochromic RBCs"
+    "Routine U/A (10종)", "ABO/Rh type & screening", "normocytic normochromic RBCs"
 }
 
 QUAL_SECTION_KEYWORDS = ("미생물", "혈액은행")
@@ -49,10 +49,10 @@ UNIT_RE = re.compile(r"^(?:" + "|".join(f"(?:{p})" for p in UNIT_PATTERNS) + r")
 UNIT_REF_SPLIT_RE = re.compile(r"^(?P<unit>(?:" + "|".join(f"(?:{p})" for p in UNIT_PATTERNS) + r"))\s+(?P<ref>.+)$", re.I)
 FLAG_RE = re.compile(r"^[▲▼]$")
 
-QUAL_WORDS = ["negative", "positive", "trace", "not found", "none", "some", "many", "few", "present", "absent"]
-NORMAL_WORDS = ["negative", "not found", "none", "absent"]
-ABNORMAL_WORDS = ["positive", "trace", "1+", "2+", "3+", "4+", "some", "many", "present"]
-PLUS_PATTERN = re.compile(r"^\s*\d\+\b")
+QUAL_WORDS = ["negative", "positive", "trace", "not found", "none", "some", "many", "few", "present", "absent", "no growth"]
+NORMAL_WORDS = ["negative", "not found", "none", "absent", "normal", "non-reactive", "undetected", "no growth"]
+ABNORMAL_WORDS = ["positive", "trace", "1+", "2+", "3+", "4+", "some", "many", "present", "reactive", "detected"]
+PLUS_PATTERN = re.compile(r"^\s*\d\+(?:[^\w]|$)")
 PURE_NUM_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*(?:[▲▼])?\s*$")
 RANGE_NUM_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*~\s*[+-]?\d+(?:\.\d+)?")
 THRESHOLD_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*(?:이상|이하)")
@@ -199,6 +199,10 @@ def looks_like_continuation_ref(line: str) -> bool:
     if CONTINUATION_REF_START_RE.search(s) or CONTINUATION_REF_KEYWORD_RE.search(s) or s.startswith("Total cholesterol -") or "참고치" in s:
         return True
     if len(parts) == 1 and bool(re.match(r'^[-\*\(\[a-zA-Z가-힣]', s)):
+        if is_section_title_like(s):
+            return False
+        if "microscopy" in s.lower() or s.endswith("종)"):
+            return False
         return True
     return False
 
@@ -255,11 +259,29 @@ def _first_num(s: str) -> Optional[float]:
         return None
 
 def _check_keyword_status(result: str, ref: str) -> str:
-    if any(w in ref for w in NORMAL_WORDS):
-        if any(w in result for w in ABNORMAL_WORDS):
-            return "abnormal"
-        if any(w in result for w in NORMAL_WORDS):
+    res, r = result.lower(), ref.lower()
+    
+    # 1. 참고치 자체가 'Trace' 등 이상 단어를 포함하고, 결과값도 동일한 이상 단어를 가질 경우 정상(normal)으로 처리
+    # 예: Urobilinogen 결과가 Trace이고 참고치도 Trace인 경우
+    for w in ABNORMAL_WORDS:
+        if w in res and w in r:
             return "normal"
+
+    # Check if result directly says abnormal
+    if any(w in res for w in ABNORMAL_WORDS) and not any(w in res for w in ["false positive", "false-positive"]):
+        return "abnormal"
+        
+    # Check if result directly says normal
+    if any(w in res for w in NORMAL_WORDS) and not any(w in res for w in ABNORMAL_WORDS):
+        return "normal"
+        
+    # Check ref context (original logic fallback)
+    if any(w in r for w in NORMAL_WORDS):
+        if any(w in res for w in ABNORMAL_WORDS):
+            return "abnormal"
+        if any(w in res for w in NORMAL_WORDS):
+            return "normal"
+            
     return "unknown"
 
 def _check_range_status(result: str, ref: str) -> str:
