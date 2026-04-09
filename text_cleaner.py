@@ -582,5 +582,5 @@ def _render_emr_mode():
 # --- 메인 렌더 함수 ---
 def render_text_cleaner():
     """텍스트 클리너 페이지를 렌더링합니다."""
-    st.title("🧹 EMR 텍스트 클리너")
+    st.title("🧹 텍스트 클리너")
     _render_emr_mode()
