@@ -477,110 +477,143 @@ def _clean_emr_special_markers(text):
     return re.sub(r'[★▲△▼▽●○◆◇■□]', '', text)
 
 
+from core.ui_theme import ui_card
+
 def _render_emr_mode():
     """KUMC EMR 모드"""
-    # 4. 짧은 설명 문구 추가
-    st.info(
-        "💡 **안내**\n"
-        "- 이 도구는 붙여넣은 EMR 텍스트의 가독성을 높이는 용도입니다.\n"
-        "- 완전한 parser가 아니며, 원본의 입력 포맷에 따라 결과가 달라질 수 있습니다.\n"
-        "- 의료적 의미나 내용의 정확성을 검증하는 도구는 아니므로, 중요 정보의 누락이 없는지 원문과 대조를 권장합니다."
+    st.markdown("### 🧹 텍스트 클리너")
+    st.caption("EMR 기록의 불필요한 공백을 제거하고 섹션을 논리적으로 구조화합니다.")
+
+    ui_card(
+        "💡 가이드", 
+        "<b>텍스트 클리너</b>는 수치 데이터보다는 현병력, 소견, SOAP 노트 등 서술형 기록 정리에 최적화되어 있습니다.<br>"
+        "정리 수준(Preset)을 선택하면 엔진이 기록 시스템에 맞춰 가독성을 극대화합니다."
     )
 
-    # 1 & 2. 빠른 정리 / 고급 정리 및 프리셋 도입
+    # 1. 프리셋 선택 UI 개선
+    st.markdown("##### ⚙️ 정리 수준 선택 (Standard 권장)")
     preset = st.radio(
-        "정리 수준 선택 (Preset)",
-        ["Safe (안전한 정리 - 기본값)", "Standard (표준 정리)", "Aggressive (적극적 구조화)"],
+        "정리 수준",
+        ["Safe (기본)", "Standard (추천)", "Aggressive (강력)"],
         horizontal=True,
+        label_visibility="collapsed",
         help="단계를 높일수록 구조화(강제 줄바꿈 및 포맷팅)가 적극적으로 적용됩니다."
     )
 
-    # Preset에 따른 기본 Option 결정 (보수적 접근)
-    emr_fw = True
-    emr_norm = True
-    emr_empty = True
-    emr_block = True
-    emr_sec = False
-    emr_prob = False
-    emr_markers = False
+    # Preset에 따른 기본 Option 결정
+    emr_fw, emr_norm, emr_empty, emr_block = True, True, True, True
+    emr_sec, emr_prob, emr_markers = False, False, False
 
     if "Standard" in preset:
         emr_sec = True
     elif "Aggressive" in preset:
-        emr_sec = True
-        emr_prob = True
+        emr_sec, emr_prob, emr_markers = True, True, True
 
-    # 고급 옵션 (Advanced)은 Expander 안에 숨김
-    with st.expander("🛠️ 고급 정리 옵션 (직접 설정)"):
+    with st.expander("🛠️ 세부 정리 옵션 (직접 설정)"):
         col_opt1, col_opt2 = st.columns(2)
         with col_opt1:
             st.caption("전처리")
             emr_fullwidth = st.checkbox("전각 스페이스(　) 제거", value=emr_fw)
-            emr_preserve_indent = st.checkbox("┗ 들여쓰기 시각적 유지 (4칸 변환)", value=False)
+            emr_preserve_indent = st.checkbox("┗ 들여쓰기 시각적 유지 (4칸)", value=False)
             emr_normalize = st.checkbox("연속 공백 정규화 (보수적)", value=emr_norm)
             emr_empty_lines = st.checkbox("연속 빈 줄 한 줄로 축소", value=emr_empty)
         with col_opt2:
             st.caption("구조 정리")
-            emr_block_check = st.checkbox("명백한 기록 블록 분리", value=emr_block)
+            emr_block_check = st.checkbox("기록 블록 분리", value=emr_block)
             emr_section_check = st.checkbox("섹션 헤더 표준화", value=emr_sec)
-            emr_problem_check = st.checkbox("Problem List 재구성 (위험)", value=emr_prob)
+            emr_problem_check = st.checkbox("Problem List 재구성 (실험적)", value=emr_prob)
             emr_markers_check = st.checkbox("특수 마커 제거 (★, ▲ 등)", value=emr_markers)
 
+    # 2. 샘플 데이터 불러오기 기능 추가
+    default_clean_sample = (
+        "Progress Note   /홍길동(전문의)  [기록일: 2026-04-09]  2026-04-09 10:30\n"
+        "주호소>  Shortness of breath\n\n"
+        "현병력>  75세 남자 환자, 3일 전부터 시작된 호흡곤란을 주소로 응급실 내원함.\n"
+        "　과거력상 HFpEF, HTN, DM 있으며 최근 투약 순응도 저하되었다고 함.\n\n"
+        "S>  \"숨이 차서 눕지를 못하겠어요.\"\n"
+        "O>  V/S: 150/90 - 92 - 24 - 36.5 (SpO2 91% RA)\n"
+        "　　Chest: rale heard on both lower lung fields\n\n"
+        "A>  Acute decompensated heart failure\n"
+        "P(Care plan)>  1. Oxygen 2L/min via nasal cannula\n"
+        "  2. Furosemide 20mg IV injection\n"
+        "  3. Fluid restriction 1.2L/day\n\n"
+        "#A. DKA c newly-diagnosed DM\n"
+        "#B. Acute Kidney Injury on CKD state\n"
+        "#1. Hypertension\n"
+        "#2. Hyperlipidemia\n"
+    )
 
-    st.markdown("---")
+    # --- [Layout Step 1: Headers] ---
+    col_h_in, col_h_out = st.columns(2)
+    with col_h_in:
+        ch1, ch2 = st.columns([2, 1])
+        ch1.markdown("##### 📥 원본 EMR 텍스트")
+        if ch2.button("📝 샘플 입력", width="stretch", key="clean_sample_btn"):
+            st.session_state["emr_input"] = default_clean_sample
+            st.rerun()
+    with col_h_out:
+        # 좌측 샘플 버튼과 높이를 맞추기 위한 더미 컬럼 구조
+        coh1, coh2 = st.columns([2, 1])
+        coh1.markdown("##### 📤 정제된 결과")
+        # coh2는 비워둠
 
-    # 3. 원문과 정리 결과 나란히 보기 (Side-by-side)
+    # --- [Layout Step 2: Input/Output Areas] ---
     col_in, col_out = st.columns(2)
-
+    
     with col_in:
-        st.write("##### 📥 원본 EMR 텍스트")
         emr_input = st.text_area(
             "원문 입력",
             height=450,
-            placeholder="On Duty Note, Progress Note 등을 여기에 붙여넣으세요...",
+            placeholder="기록(Progress Note 등)을 여기에 붙여넣으세요...",
             label_visibility="collapsed",
             key="emr_input"
         )
-        # 5. 제품다운 버튼 이름 변경
-        run_btn = st.button("✨ EMR 가독성 개선 실행", type="primary", use_container_width=True)
+
+    # 텍스트 처리 로직 (미리 계산)
+    cleaned = ""
+    if emr_input:
+        cleaned = emr_input
+        if emr_fullwidth:
+            cleaned = _clean_emr_fullwidth_spaces(cleaned, preserve_indent=emr_preserve_indent)
+        if emr_normalize:
+            cleaned = _clean_emr_normalize_spaces(cleaned)
+        if emr_block_check:
+            cleaned = _clean_emr_block_separator(cleaned)
+        if emr_section_check:
+            cleaned = _clean_emr_section_headers(cleaned)
+        if emr_problem_check:
+            cleaned = _clean_emr_problem_list(cleaned)
+        if emr_empty_lines:
+            cleaned = _clean_emr_empty_lines(cleaned)
+        if emr_markers_check:
+            cleaned = _clean_emr_special_markers(cleaned)
+        cleaned = cleaned.strip()
 
     with col_out:
-        st.write("##### 📤 정리된 결과")
-        if run_btn and emr_input:
-            cleaned = emr_input
-            
-            # 파이프라인 적용
-            if emr_fullwidth:
-                cleaned = _clean_emr_fullwidth_spaces(cleaned, preserve_indent=emr_preserve_indent)
-            if emr_normalize:
-                cleaned = _clean_emr_normalize_spaces(cleaned)
-            if emr_block_check:
-                cleaned = _clean_emr_block_separator(cleaned)
-            if emr_section_check:
-                cleaned = _clean_emr_section_headers(cleaned)
-            if emr_problem_check:
-                cleaned = _clean_emr_problem_list(cleaned)
-            if emr_empty_lines:
-                cleaned = _clean_emr_empty_lines(cleaned)
-            if emr_markers_check:
-                cleaned = _clean_emr_special_markers(cleaned)
-            
-            cleaned = cleaned.strip()
-            
+        if emr_input:
             st.text_area("결과 출력", value=cleaned, height=450, label_visibility="collapsed", key="cleaned_result")
-            copy_to_clipboard(text=cleaned, before_copy_label="📋 결과 복사하기", after_copy_label="✅ 복사 완료")
+        else:
+            st.text_area("결과 대기", value="", height=450, disabled=True, label_visibility="collapsed", placeholder="왼쪽에서 텍스트를 입력하면 결과가 여기에 표시됩니다.")
+
+    # --- [Layout Step 3: Action Buttons] ---
+    col_b_in, col_b_out = st.columns(2)
+    
+    with col_b_in:
+        run_btn = st.button("✨ 가독성 개선 실행", type="primary", width="stretch")
+        if st.button("🗑️ 입력 초기화", width="stretch", key="clean_btn_clear"):
+            st.session_state["emr_input"] = ""
+            st.rerun()
+
+    with col_b_out:
+        if emr_input:
+            # 개선 실행 버튼과 높이를 맞추기 위해 버튼 먼저 배치
+            copy_to_clipboard(text=cleaned, before_copy_label="📋 결과 클립보드 복사", after_copy_label="✅ 복사 완료")
             
             orig_len = len(emr_input)
             clean_len = len(cleaned)
             removed = orig_len - clean_len
-            st.caption(f"통계: 원본 {orig_len}자 ➔ 정리 후 {clean_len}자 (총 {removed}자 정리됨)")
-        else:
-            st.text_area("결과 대기", value="", height=450, disabled=True, label_visibility="collapsed", placeholder="왼쪽에서 텍스트를 입력하고 '개선 실행' 버튼을 누르면 결과가 나타납니다.")
+            st.caption(f"통계: {orig_len}자 ➔ {clean_len}자 ({removed}자 정제됨)")
 
-
-
-# --- 메인 렌더 함수 ---
 def render_text_cleaner():
     """텍스트 클리너 페이지를 렌더링합니다."""
-    st.title("🧹 텍스트 클리너")
     _render_emr_mode()

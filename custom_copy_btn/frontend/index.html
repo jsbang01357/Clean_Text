@@ -72,7 +72,12 @@
 
     Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
     Streamlit.setComponentReady();
-    Streamlit.setFrameHeight(38);
+    // 문서 높이에 맞게 프레임 높이 자동 조절
+    const setHeight = () => {
+      Streamlit.setFrameHeight(document.documentElement.scrollHeight);
+    }
+    window.addEventListener('resize', setHeight);
+    setHeight();
   </script>
 </body>
 

@@ -5,30 +5,38 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 
-SKIP_EXACT = {"[소견]", "[의뢰의사 Comment]", "Antibiotic"}
-SECTION_HEADER_RE = re.compile(r"^\s*\[(진검|핵의학|병리과|수혈의학|진단검사의학과|건강의학센터|병리|영상의학과)\]\s*(.+?)\s*$")
-META_LINE_RE = re.compile(r"(채혈:|접수:|보고:|IMN\()")
+SKIP_EXACT = {"[소견]", "[의뢰의사 Comment]", "Antibiotic", "[판정]", ".", "신속)", "tate)", "종)", "fraction)", "tion)"}
+SECTION_HEADER_RE = re.compile(r"^\s*\[(진검|핵의학|병리과|수혈의학|진단검사의학과|건강의학센터|병리|영상의학과|심장혈관센터|재활의학과|호흡기센터|내분비대사내과|이비인후-두경부외과|이비인후-두경부센터|내분비내과)\]\s*(.+?)\s*$")
+META_LINE_RE = re.compile(r"(채혈:|접수:|보고:|IM[NI]\()")
 COLUMN_HEADER_RE = re.compile(r"^\s*검사명\s+결과값\s+단위\s+참고치\s*$")
-COMMENT_LINE_RE = re.compile(r"^\s*(\[소견\]|\[의뢰의사 Comment\]|\[판독의\])")
+COMMENT_LINE_RE = re.compile(r"^\s*(\[소견\]|\[의뢰의사 Comment\]|\[판독의\]|\[판정\]|판독의:)")
 MARKDOWN_HEADER_RE = re.compile(r"^\s*\|\s*Test\s*\|\s*Value\s*\|", re.I)
 MARKDOWN_RULE_RE = re.compile(r"^\s*\|\s*-{2,}")
 BULLET_PREFIX_RE = re.compile(r"^[\s\.·‥∙⋅•ㆍ]+")
-EMERGENCY_PREFIX_RE = re.compile(r"^\((?:응급|응급뇨)\)\s*")
+EMERGENCY_PREFIX_RE = re.compile(r"^\((?:응급|응급뇨|응급면역|뇨)\)\s*")
 DRAW_TIME_RE = re.compile(r"채혈:\s*(\d{4}-\d{2}-\d{2})\s*(\d{2}:\d{2})")
-RANGE_LIKE_NAME_RE = re.compile(r"^\s*(?:[<>≤≥]\s*\d|\d+(?:\.\d+)?\s*~\s*\d+(?:\.\d+)?)")
+RANGE_LIKE_NAME_RE = re.compile(r"^\s*(?:[<>≤≥]\s*\d|\d+(?:\.\d+)?\s*[~-]\s*\d+(?:\.\d+)?)")
 CONTINUATION_REF_START_RE = re.compile(r"^\s*(?:[<>≤≥]\s*\d|\d+(?:\.\d+)?\s*~\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*이상|\d+(?:\.\d+)?\s*이하)")
 CONTINUATION_REF_KEYWORD_RE = re.compile(r"(경계치|높음|낮음|정상|이상지질혈증|대사증후군|신부전|경도감소|고도감소)")
 
 SECTION_TITLE_BLACKLIST = {
     "CBC with diff count & ESR", "WBC differential count", "Admission/Electro Battery(24",
     "종)", "Routine U/A with Microscope", "Gram Stain & Cul & Sensi", "Urine Microscopy",
-    "ABGA ,Ca++,electrolyte", "CBC with diff & Reti"
+    "ABGA ,Ca++,electrolyte", "CBC with diff & Reti", "ABGA (Lactate 포함)",
+    "Prothrombin Time", "Cardiac Marker", "Electrolyte(3종)", "Calculated LDL Cholesterol",
+    "PB morphology", "SUMMARY", "Comment", "RBC", "WBC", "Platelet", "normal in No.", "relative eosinophilia",
+    "All items of ABGA", "IPF (Immature platelet frac", "IRF (immature reticulocyte",
+    "Routine U/A (10종)", "Urine Microscopy", "ABO/Rh type & screening", "normocytic normochromic RBCs"
 }
 
 QUAL_SECTION_KEYWORDS = ("미생물", "혈액은행")
-REPORT_SECTION_KEYWORDS = ("영상", "소화기병센터", "내시경", "병리")
+REPORT_SECTION_KEYWORDS = (
+    "영상", "소화기병센터", "내시경", "병리", "심장혈관", "재활", "호흡기", "이비인후", "내분비", "Sarcopenia", "PTA", 
+    "PTsec", "PFT", "Spine", "Abdomen", "Chest", "MRI", "CT", "Ultrasound", "초음파", "Audiometry", "composition",
+    "PB morphology", "Thromboelastometry"
+)
 FORCE_QUANTITATIVE_KEYWORDS = ("핵의학",)
-QUAL_SKIP_EXACT = {"Gram Stain & Cul & Sensi", "Blood culture", "Antibiotic"}
+QUAL_SKIP_EXACT = {"Gram Stain & Cul & Sensi", "Blood culture", "Antibiotic", "[OCR결과/장비결과] Interface 용 서식지"}
 
 UNIT_ALIASES = {"㎕": "uL", "μL": "uL", "µL": "uL", "μIU": "uIU", "µIU": "uIU", "㎗": "dL"}
 
@@ -48,6 +56,7 @@ PLUS_PATTERN = re.compile(r"^\s*\d\+\b")
 PURE_NUM_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*(?:[▲▼])?\s*$")
 RANGE_NUM_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*~\s*[+-]?\d+(?:\.\d+)?")
 THRESHOLD_PATTERN = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*(?:이상|이하)")
+SKIP_CONTAIN = {"[OCR결과/장비결과] Interface 용 서식지", "상기 체성분 분석 검사", "【 Image Interface 】", "종합검증 보고서", "보고자:"}
 NUMERIC_REF_PATTERN = re.compile(r"(<|>|<=|>=|~|이상|이하|\d)")
 
 
@@ -66,6 +75,7 @@ class LabRow:
 class QualRow:
     item: str
     result: str
+    unit: str = ""
     ref: str = ""
     status: str = "unknown"
     note: str = ""
@@ -75,7 +85,7 @@ class QualRow:
     table_title: str = ""
 
 def normalize_line(line: str) -> str:
-    line = line.replace("\u3000", " ").replace("\t", "  ").rstrip()
+    line = line.replace("\u3000", "  ").replace("\t", "  ").rstrip()
     return re.sub(r" {2,}", "  ", line)
 
 def split_columns(line: str) -> List[str]:
@@ -114,9 +124,7 @@ def clean_section_name(section: str) -> str:
 def extract_section_name(line: str) -> str:
     m = SECTION_HEADER_RE.match(line.strip())
     if m:
-        dept = m.group(1)
-        rest = re.sub(r"\[[^\]]+\]", "", m.group(2))
-        return re.sub(r"\s+", " ", f"{dept} {rest}").strip(" -")
+        return clean_section_name(m.group(2))
     return "Unknown"
 
 def extract_draw_time(line: str) -> str:
@@ -152,13 +160,16 @@ def is_skip_line(line: str) -> bool:
         return True
     if s.startswith("- "):
         return True
+    if any(k in s for k in SKIP_CONTAIN):
+        return True
     return False
 
 def is_qualitative_section(section: str) -> bool:
     return any(k in (section or "") for k in QUAL_SECTION_KEYWORDS)
 
-def is_report_section(section: str) -> bool:
-    return any(k in (section or "") for k in REPORT_SECTION_KEYWORDS)
+def is_report_section(section: str, line: str = "") -> bool:
+    return any(k in (section or "") for k in REPORT_SECTION_KEYWORDS) or \
+           any(k in (line or "") for k in REPORT_SECTION_KEYWORDS)
 
 def is_qual_skip_line(line: str) -> bool:
     s = line.strip()
@@ -175,7 +186,8 @@ def is_qual_skip_line(line: str) -> bool:
     return False
 
 def is_section_title_like(line: str) -> bool:
-    return clean_test_name(line) in SECTION_TITLE_BLACKLIST
+    cleaned = clean_test_name(line)
+    return any(cleaned.startswith(k) for k in SECTION_TITLE_BLACKLIST)
 
 def looks_like_continuation_ref(line: str) -> bool:
     s = line.strip()
@@ -184,7 +196,7 @@ def looks_like_continuation_ref(line: str) -> bool:
     parts = split_columns(s)
     if len(parts) >= 3 and not RANGE_LIKE_NAME_RE.match(parts[0]):
         return False
-    if CONTINUATION_REF_START_RE.search(s) or CONTINUATION_REF_KEYWORD_RE.search(s) or s.startswith("Total cholesterol -"):
+    if CONTINUATION_REF_START_RE.search(s) or CONTINUATION_REF_KEYWORD_RE.search(s) or s.startswith("Total cholesterol -") or "참고치" in s:
         return True
     if len(parts) == 1 and bool(re.match(r'^[-\*\(\[a-zA-Z가-힣]', s)):
         return True
@@ -388,6 +400,7 @@ def parse_qualitative_row(line: str, section: str = "", draw_time: str = "") -> 
     return QualRow(
         item=item,
         result=re.sub(r"\s+", " ", result).strip(),
+        unit="", # 기본 정성 파싱에서는 단위를 빈 값으로 시작 (필요 시 확장)
         ref=re.sub(r"\s+", " ", ref).strip(),
         status=classify_qual_status(result, ref),
         note=re.sub(r"\s+", " ", note).strip(),
@@ -425,7 +438,7 @@ def parse_lab_text(text: str) -> Tuple[List[LabRow], List[QualRow], List[str], L
             current_draw_time = draw_time
             continue
 
-        if is_report_section(current_section):
+        if is_report_section(current_section, stripped) or SECTION_HEADER_RE.match(stripped):
             if not is_skip_line(stripped):
                 report_lines.append(stripped)
             continue
@@ -474,6 +487,7 @@ def parse_lab_text(text: str) -> Tuple[List[LabRow], List[QualRow], List[str], L
                 q_row = QualRow(
                     item=row.name,
                     result=row.value,
+                    unit=row.unit,
                     ref=row.ref,
                     status=classify_qual_status(row.value, row.ref),
                     raw_line=row.raw_line,
@@ -490,7 +504,7 @@ def parse_lab_text(text: str) -> Tuple[List[LabRow], List[QualRow], List[str], L
                 last_qual_row = None
             continue
 
-        if not is_section_title_like(stripped):
+        if not is_section_title_like(stripped) and not any(k in stripped for k in SKIP_CONTAIN) and not RANGE_LIKE_NAME_RE.match(stripped):
             unparsed_lines.append(stripped)
 
     return rows, qual_rows, unparsed_lines, report_lines

@@ -18,5 +18,6 @@ def copy_to_clipboard(
         text=text,
         before_copy_label=before_copy_label,
         after_copy_label=after_copy_label,
+        height=45,
     )
     return component_value

@@ -31,8 +31,9 @@ def qual_rows_to_dataframe(rows: List[QualRow]) -> pd.DataFrame:
     for r in rows:
         data.append({
             "제목": r.table_title,
-            "항목": r.item,
-            "결과": r.result,
+            "검사명": r.item,
+            "결과값": r.result,
+            "단위": r.unit,
             "참고치": r.ref,
             "판정": r.status,
             "비고": r.note,
@@ -148,12 +149,12 @@ def build_excel_bytes(rows: List[LabRow], qual_rows: List[QualRow], raw_text: st
 
         cur = 1
         for title, group_rows in qual_grouped.items():
-            ws_qgroup.merge_cells(start_row=cur, start_column=1, end_row=cur, end_column=5)
+            ws_qgroup.merge_cells(start_row=cur, start_column=1, end_row=cur, end_column=4)
             cell = ws_qgroup.cell(row=cur, column=1, value=title)
             cell.font, cell.fill, cell.alignment = title_font, title_fill, Alignment(horizontal="left")
             cur += 1
 
-            for i, h in enumerate(["항목", "결과", "참고치", "판정", "비고"], start=1):
+            for i, h in enumerate(["검사명", "결과값", "단위", "참고치"], start=1):
                 cc = ws_qgroup.cell(row=cur, column=i, value=h)
                 cc.font, cc.fill = header_font, header_fill
             cur += 1
@@ -162,9 +163,8 @@ def build_excel_bytes(rows: List[LabRow], qual_rows: List[QualRow], raw_text: st
                 cells = [
                     ws_qgroup.cell(row=cur, column=1, value=r.item),
                     ws_qgroup.cell(row=cur, column=2, value=r.result),
-                    ws_qgroup.cell(row=cur, column=3, value=r.ref),
-                    ws_qgroup.cell(row=cur, column=4, value=r.status),
-                    ws_qgroup.cell(row=cur, column=5, value=r.note)
+                    ws_qgroup.cell(row=cur, column=3, value=r.unit),
+                    ws_qgroup.cell(row=cur, column=4, value=r.ref)
                 ]
                 if r.status in ("high", "abnormal"):
                     for cell in cells: cell.font = red_font
